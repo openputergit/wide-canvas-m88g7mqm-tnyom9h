@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyberpunk Quiz Challenge</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --neon-text-color: #f40;
+            --neon-border-color: #08f;
+        }
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background-color: #0a0a0a;
+            color: #fff;
+            min-height: 100vh;
+        }
+        .cyberpunk-border {
+            border: 2px solid var(--neon-border-color);
+            box-shadow: 0 0 10px var(--neon-border-color);
+        }
+        .neon-text {
+            text-shadow: 0 0 10px var(--neon-text-color);
+            color: var(--neon-text-color);
+        }
+        .question-box {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+        }
+        .glitch-effect {
+            animation: glitch 1s infinite;
+        }
+        @keyframes glitch {
+            2%, 64% { transform: translate(2px, 0) skew(0deg); }
+            4%, 60% { transform: translate(-2px, 0) skew(0deg); }
+            62% { transform: translate(0, 0) skew(5deg); }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <!-- Payment Section -->
+    <div id="paymentSection" class="max-w-md mx-auto cyberpunk-border p-6 rounded-lg">
+        <h1 class="text-3xl font-bold mb-6 neon-text text-center">CYBERPUNK QUIZ</h1>
+        <div id="upiDetails" class="mb-6">
+            <div class="text-center mb-4">
+                <img id="qrCode" alt="UPI QR Code" class="mx-auto cyberpunk-border">
+            </div>
+            <p class="text-center mb-2">UPI ID: 9970593194@okbizaxis</p>
+            <input type="text" id="utrNumber" placeholder="Enter UTR Number" class="w-full bg-black border border-blue-500 p-2 rounded mb-4 text-white">
+            <button onclick="verifyPayment()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded glitch-effect">
+                Verify Payment
+            </button>
+        </div>
+    </div>
+
+    <!-- Registration Section -->
+    <div id="registrationSection" class="max-w-md mx-auto cyberpunk-border p-6 rounded-lg mt-4 hidden">
+        <h2 class="text-2xl font-bold mb-4 neon-text">Registration</h2>
+        <input type="text" id="name" placeholder="Name" class="w-full bg-black border border-blue-500 p-2 rounded mb-4 text-white">
+        <input type="text" id="mobile" placeholder="Mobile Number" class="w-full bg-black border border-blue-500 p-2 rounded mb-4 text-white">
+        <input type="text" id="address" placeholder="Address" class="w-full bg-black border border-blue-500 p-2 rounded mb-4 text-white">
+        <button id="selfieBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-4">
+            Take Selfie
+        </button>
+        <video id="video" class="hidden w-full mb-4 cyberpunk-border"></video>
+        <canvas id="canvas" class="hidden"></canvas>
+        <button onclick="startQuiz()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded glitch-effect">
+            Start Quiz
+        </button>
+    </div>
+
+    <!-- Quiz Section -->
+    <div id="quizSection" class="max-w-md mx-auto cyberpunk-border p-6 rounded-lg mt-4 hidden">
+        <h2 class="text-2xl font-bold mb-4 neon-text">Question <span id="questionNumber">1</span>/50</h2>
+        <div id="questionContainer" class="question-box p-4 rounded-lg mb-4">
+            <p id="questionText" class="text-lg mb-4"></p>
+            <div id="options" class="space-y-2"></div>
+        </div>
+        <button onclick="nextQuestion()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded glitch-effect">
+            Next Question
+        </button>
+    </div>
+
+    <script>
+        // Initialize Firebase (Add your config)
+        const firebaseConfig = {
+            // Your Firebase config here
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        // Generate QR Code
+        fetch('https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=9970593194@okbizaxis')
+            .then(response => response.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                document.getElementById('qrCode').src = url;
+            });
+
+        let questions = []; // Will store randomized questions
+        let currentQuestion = 0;
+        let userAnswers = [];
+
+        function verifyPayment() {
+            // Mock payment verification
+            const utr = document.getElementById('utrNumber').value;
+            if (utr.length > 8) {
+                document.getElementById('paymentSection').classList.add('hidden');
+                document.getElementById('registrationSection').classList.remove('hidden');
+            } else {
+                alert('Invalid UTR Number');
+            }
+        }
+
+        // Selfie functionality
+        document.getElementById('selfieBtn').addEventListener('click', async () => {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.classList.remove('hidden');
+                video.play();
+                
+                // Take photo after 3 seconds
+                setTimeout(() => {
+                    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = canvas.toDataURL('image/png');
+                    stream.getTracks().forEach(track => track.stop());
+                    video.classList.add('hidden');
+                }, 3000);
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                alert('Could not access camera');
+            }
+        });
+
+        function generateQuestions() {
+            const questionPool = [
+                {
+                    question: "What is cyberpunk?",
+                    options: ["A music genre", "A literary and cultural movement", "A type of food", "A sport"],
+                    correct: 1
+                },
+                // Add more questions here
+            ];
+            
+            // Randomize and select questions
+            questions = questionPool.sort(() => Math.random() - 0.5).slice(0, 50);
+        }
+
+        function startQuiz() {
+            const name = document.getElementById('name').value;
+            const mobile = document.getElementById('mobile').value;
+            const address = document.getElementById('address').value;
+
+            if (!name || !mobile || !address) {
+                alert('Please fill all fields');
+                return;
+            }
+
+            generateQuestions();
+            document.getElementById('registrationSection').classList.add('hidden');
+            document.getElementById('quizSection').classList.remove('hidden');
+            displayQuestion();
+        }
+
+        function displayQuestion() {
+            const question = questions[currentQuestion];
+            document.getElementById('questionNumber').textContent = currentQuestion + 1;
+            document.getElementById('questionText').textContent = question.question;
+            
+            const optionsContainer = document.getElementById('options');
+            optionsContainer.innerHTML = '';
+            
+            question.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.className = 'w-full text-left p-2 rounded cyberpunk-border hover:bg-blue-900 transition-colors';
+                button.textContent = option;
+                button.onclick = () => selectAnswer(index);
+                optionsContainer.appendChild(button);
+            });
+        }
+
+        function selectAnswer(index) {
+            userAnswers[currentQuestion] = index;
+            document.querySelectorAll('#options button').forEach((btn, i) => {
+                btn.classList.toggle('bg-blue-600', i === index);
+            });
+        }
+
+        function nextQuestion() {
+            if (currentQuestion < questions.length - 1) {
+                currentQuestion++;
+                displayQuestion();
+            } else {
+                alert('Quiz completed! Results will be available soon.');
+                // Save results to Firebase here
+            }
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
